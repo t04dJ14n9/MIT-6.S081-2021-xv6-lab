@@ -196,7 +196,7 @@ UPROGS=\
 	$U/_zombie\
 	$U/_test\
 	$U/_pingpong\
-
+	$U/_primes\
 
 
 
