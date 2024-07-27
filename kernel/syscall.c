@@ -6,6 +6,10 @@
 #include "proc.h"
 #include "syscall.h"
 #include "defs.h"
+#include "sysinfo.h"
+
+int numOfUnusedProc(void);
+int freeMemInBytes(void);
 
 // Fetch the uint64 at addr from the current process.
 int fetchaddr(uint64 addr, uint64 *ip)
@@ -101,6 +105,7 @@ extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
 uint64 sys_trace(void);
+uint64 sys_sysinfo(void);
 
 static uint64 (*syscalls[])(void) = {
     [SYS_fork] sys_fork,
@@ -125,6 +130,7 @@ static uint64 (*syscalls[])(void) = {
     [SYS_mkdir] sys_mkdir,
     [SYS_close] sys_close,
     [SYS_trace] sys_trace,
+    [SYS_sysinfo] sys_sysinfo,
 };
 
 static char *syscallnames[] = {
@@ -150,6 +156,7 @@ static char *syscallnames[] = {
     [SYS_mkdir] "mkdir",
     [SYS_close] "close",
     [SYS_trace] "trace",
+    [SYS_sysinfo] "sysinfo",
 };
 
 void syscall(void)
@@ -180,5 +187,25 @@ uint64 sys_trace(void)
   argint(0, &mask);
   struct proc *p = myproc();
   p->tracemask = mask;
+  return 0;
+}
+
+uint64 sys_sysinfo(void)
+{
+  printf("Entering sys_sysinfo\n");
+  uint64 addr;
+  argaddr(0, &addr);
+  printf("addr = %d\n", addr);
+  struct sysinfo info;
+
+  info.freemem = freeMemInBytes();
+  printf("info.freemem = %d\n", info.freemem);
+  info.nproc = numOfUnusedProc();
+  printf("info.nproc = %d\n", info.nproc);
+  struct proc *p = myproc();
+  if (copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
+  {
+    return -1;
+  }
   return 0;
 }
