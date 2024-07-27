@@ -46,7 +46,6 @@ void testmem()
   uint64 n = countfree();
 
   sinfo(&info);
-  printf("info.freepage = %d\n", info.freemem);
   if (info.freemem != n)
   {
     printf("FAIL: free mem %d (bytes) instead of %d\n", info.freemem, n);
@@ -138,7 +137,6 @@ int main(int argc, char *argv[])
 {
   printf("sysinfotest: start\n");
   testcall();
-  printf("testall passed\n");
   testmem();
   testproc();
   printf("sysinfotest: OK\n");

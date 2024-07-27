@@ -8,7 +8,7 @@
 #include "defs.h"
 #include "sysinfo.h"
 
-int numOfUnusedProc(void);
+int numOfProc(void);
 int freeMemInBytes(void);
 
 // Fetch the uint64 at addr from the current process.
@@ -192,16 +192,12 @@ uint64 sys_trace(void)
 
 uint64 sys_sysinfo(void)
 {
-  printf("Entering sys_sysinfo\n");
   uint64 addr;
   argaddr(0, &addr);
-  printf("addr = %d\n", addr);
   struct sysinfo info;
 
   info.freemem = freeMemInBytes();
-  printf("info.freemem = %d\n", info.freemem);
-  info.nproc = numOfUnusedProc();
-  printf("info.nproc = %d\n", info.nproc);
+  info.nproc = numOfProc();
   struct proc *p = myproc();
   if (copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
   {

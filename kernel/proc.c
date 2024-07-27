@@ -154,14 +154,14 @@ found:
   return p;
 }
 
-int numOfUnusedProc(void)
+int numOfProc(void)
 {
   struct proc *p;
   int count = 0;
   for (p = proc; p < &proc[NPROC]; p++)
   {
     acquire(&p->lock);
-    if (p->state == UNUSED)
+    if (p->state != UNUSED)
     {
       count++;
     }
@@ -169,6 +169,7 @@ int numOfUnusedProc(void)
   }
   return count;
 }
+
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
