@@ -432,3 +432,40 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+void dfs_print(pte_t pte, int level, int index){
+  if (level > 2){
+    return;
+  }
+  char *format;
+  if (level == 0){
+    format = "..%d: pte %p pa %p\n";
+  } else if(level == 1){
+    format = ".. ..%d: pte %p pa %p\n";
+  } else {
+    format = ".. .. ..%d: pte %p pa %p\n";
+  } 
+
+  printf(format, index, pte, PTE2PA(pte));
+
+  pagetable_t pagetable = (pagetable_t)PTE2PA(pte);
+  for(int i = 0; i < 512; i ++){
+    pte_t pte = pagetable[i];
+    if (!(pte & PTE_V)){
+      continue;
+    }
+    dfs_print(pte, level + 1, i);
+  }
+}
+
+void vmprint(pagetable_t pagetable){
+  printf("page table %p\n", pagetable);
+  for (int i = 0; i < 512; i ++){
+    pte_t pte = pagetable[i];
+    if (!(pte & PTE_V)) {
+      continue;
+    }
+    dfs_print(pte, 0, i);
+  }
+  return;
+}
