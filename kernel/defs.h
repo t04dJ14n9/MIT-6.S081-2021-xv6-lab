@@ -187,3 +187,5 @@ void            virtio_disk_intr(void);
 
 // print page table
 void vmprint(pagetable_t pagetable);
+
+pte_t* walk(pagetable_t pagetable, uint64 va, int alloc);

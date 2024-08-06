@@ -81,6 +81,42 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  // parse argument
+  uint64 buf;
+  if (argaddr(0, &buf) < 0) {
+    return -1;
+  }
+
+  int size;
+  if (argint(1, &size) < 0) {
+    return -1;
+  }
+
+  uint64 dstva;
+  if (argaddr(2, &dstva) < 0) {
+    return -1;
+  }
+
+  if (size > 32) {
+    printf("pgaccess cannot handle size > 32\n");
+  }
+
+  // kernel buffer for storing access bits
+  unsigned int abits = 0;
+
+  struct proc *p = myproc();
+  uint64 base = PGROUNDDOWN(buf);
+  for (int i = 0; i < size; i ++){
+    uint64 va = base + PGSIZE * i;
+    pte_t *pte = walk(p->pagetable, va, 0);
+    if (*pte & PTE_A){
+      abits |= (1L << i);
+      *pte -= PTE_A;
+    }
+  }
+  if (copyout(p->pagetable, dstva, (char *)&abits, 4) < 0) {
+    return -1;
+  }
   return 0;
 }
 #endif
