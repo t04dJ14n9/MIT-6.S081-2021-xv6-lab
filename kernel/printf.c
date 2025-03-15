@@ -132,3 +132,21 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void backtrace()
+{
+  printf("backtrace:\n");
+  uint64 fp = r_fp(); 
+  uint64 top = PGROUNDUP(fp);
+  uint64 bottom = PGROUNDDOWN(fp);
+
+  while(fp >= bottom && fp <= top) {
+    // location of return address in user virtual memory = fp - 8
+    // we need to print the M(fp - 8) - 8, which is the address of calling function
+    uint64 ra = *(uint64 *)(fp - 8);
+   
+    printf("%p\n", ra - 8);
+    
+    fp = *(uint64 *)(fp - 16);
+  }
+}

@@ -323,6 +323,15 @@ r_ra()
   return x;
 }
 
+// read the frame pointer s0, used in backtrace lab4
+static inline uint64 
+r_fp() 
+{
+  uint64 x;
+  asm volatile("mv %0, s0" : "=r"(x));
+  return x;
+}
+
 // flush the TLB.
 static inline void
 sfence_vma()
