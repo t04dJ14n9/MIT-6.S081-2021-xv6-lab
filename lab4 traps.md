@@ -211,3 +211,71 @@ $ addr2line -e kernel/kernel
 ```
 note that when we call `sys_sleep()`, we are in the kernel stack in supervisor mode with kernel satp. So VM is directly mapped to PM.
 We can get return address `ra` at `Memory[fp-8]` and the previous frame pointer `fp` at `Memory[fp-16]`, and we repeatedly print `ra - 8`, which is the instruction jump to the next routine, are update fp with previous fp.
+
+# Alarm
+basic workflow:
+```mermaid
+sequenceDiagram
+autonumber
+user ->> kernel: sigalarm()
+kernel ->> kernel: register the handler and alarm fire interval
+hardware ->> kernel: timer interrupt
+opt need to call handler
+	kernel ->> kernel: 1. save current trapframe in a back one, so that user program can be stored.<br> 2. modify the epc(trap return address) to handler
+end
+	kernel ->> kernel: yield(), let CPU reschedule
+	kernel ->> user: usertrapret(), return to handler
+	user ->> hardware: sigreturn() in handler
+	hardware ->> kernel: trap from userspace, enter syscall(), then sigreturn()
+	kernel ->> kernel: inside sigreturn(), restore the trapframe from the backup,<br> so that it can jump back to the place before interrupt that causes alarm
+	kernel ->> user: usertrapret()
+```
+## core code
+in `sysproc.c`, add two syscall implementation
+```c
+uint64
+sys_sigalarm(void)
+{
+  if(argint(0, &myproc()->alarminterval) < 0)
+    return -1;
+  if(argaddr(1, &myproc()->alarmhandler) < 0)
+    return -1;
+  myproc()->alarmticks = 0;
+  printf("sys_sigalarm: alarminterval: %d, alarmhandler: %p\n", myproc()->alarminterval, myproc()->alarmhandler);
+  return 0;
+}
+
+uint64
+sys_sigreturn(void)
+{
+  // restore the trapframe before interrupt that causes handler
+  memmove(myproc()->trapframe, myproc()->interptf, sizeof(struct trapframe));
+  // set in handler = false
+  myproc()->inhandler = 0;
+  return 0;
+}
+```
+
+inside `trap.c`, add extra logic to check if handler need to be executed:
+```c
+  // give up the CPU if this is a timer interrupt.
+  if(which_dev == 2){
+    // lab4: if alarm interval is set, add alarmticks by 1
+    if(p->alarminterval > 0 && p->inhandler == 0){
+      printf("alarmticks: %d\n", p->alarmticks);
+      p->alarmticks ++;
+      if(p->alarmticks == p->alarminterval){
+        p->alarmticks = 0;
+        // saves user program state
+        memmove(p->interptf, p->trapframe, sizeof(struct trapframe));
+        // set in handler = true
+        p->inhandler = 1;
+        // modify the trap return address to handler
+        p->trapframe->epc = p->alarmhandler;
+        // execute the alarm handler
+        usertrapret();
+      }
+    }
+    yield();
+  }
+```
