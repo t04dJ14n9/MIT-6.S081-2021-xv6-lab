@@ -96,3 +96,25 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_sigalarm(void)
+{
+  if(argint(0, &myproc()->alarminterval) < 0)
+    return -1;
+  if(argaddr(1, &myproc()->alarmhandler) < 0)
+    return -1;
+  myproc()->alarmticks = 0;
+  // printf("sys_sigalarm: alarminterval: %d, alarmhandler: %p\n", myproc()->alarminterval, myproc()->alarmhandler);
+  return 0;
+}
+
+uint64
+sys_sigreturn(void)
+{
+  // restore the trapframe before interrupt that causes handler
+  memmove(myproc()->trapframe, myproc()->interptf, sizeof(struct trapframe));
+  // set in handler = false
+  myproc()->inhandler = 0;
+  return 0;
+}

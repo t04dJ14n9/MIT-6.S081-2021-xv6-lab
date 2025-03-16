@@ -77,11 +77,29 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    // lab4: if alarm interval is set, add alarmticks by 1
+    if(p->alarminterval > 0 && p->inhandler == 0){
+      // printf("alarmticks: %d\n", p->alarmticks);
+      p->alarmticks ++;
+      if(p->alarmticks == p->alarminterval){
+        p->alarmticks = 0;
+        // saves user program state
+        memmove(p->interptf, p->trapframe, sizeof(struct trapframe));
+        // set in handler = true
+        p->inhandler = 1;
+        // modify the trap return address to handler
+        p->trapframe->epc = p->alarmhandler;
+        // execute the alarm handler
+        usertrapret();
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }
+
 
 //
 // return to user space
