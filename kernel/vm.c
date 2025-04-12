@@ -5,6 +5,7 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
 
 /*
  * the kernel's page table.
@@ -303,20 +304,32 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+      panic("uvmcopy: page not valid");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    if (debug){
+        printf("uvmcopy: pa %p, flags %p\n", pa, flags);
+    }
+    inc_ref_count(pa); // increase reference count
+    
+    if (flags & PTE_W){ // has write access, make it a COW page
+      flags = (flags & ~PTE_W) | PTE_COW;
+      // set parent PTE
+      if (debug)
+        printf("uvmcopy(): before PTE_W %d, PTE_COW %d. after PTE_W %d, PTE_COW %d\n", flags & PTE_W, flags & PTE_COW, ((flags & ~PTE_W) | PTE_COW) & PTE_W, ((flags & ~PTE_W) | PTE_COW) & PTE_COW);
+      *pte = (*pte & ~PTE_W) | PTE_COW;
+    } 
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      printf("uvmcopy: mappages failed\n");
+      kfree((void *)pa);
       goto err;
     }
   }
@@ -340,6 +353,47 @@ uvmclear(pagetable_t pagetable, uint64 va)
   *pte &= ~PTE_U;
 }
 
+uint64
+get_pa(pagetable_t pagetable, uint64 va){
+  pte_t *pte = walk(pagetable, va, 0);
+  if(!pte){
+    printf("get_pa(): pte is null\n");
+    return 0;
+  }
+  uint64 pa = PTE2PA(*pte);
+
+  uint64 flags = PTE_FLAGS(*pte);
+  if (debug)
+    printf("get_pa(): va %p, pa %p, flags %p, flag&PTE_U %d, flag&PTE_COW %d, flag&PTE_V %d, flag&PTE_W %d\n", va, pa, flags, (flags & PTE_U) > 0, (flags & PTE_COW) > 0, (flags & PTE_V) > 0, (flags & PTE_W) > 0);
+
+  if (!(flags & PTE_U) || !(flags & PTE_V)) {
+    panic("get_pa(): user or valid bit not set\n");
+  }
+
+  if(!(flags & PTE_COW)){ // COW bit not set, directly return the PA
+    return pa;
+  }
+
+  // COW bit set, create a new physical page and copy COW page to it
+  void *new_page = kalloc();
+  if (!new_page) {
+    panic("get_pa(): kalloc failed\n");
+  }
+  memmove(new_page, (void *)pa, PGSIZE);
+
+  // set the pte
+  flags = (flags | PTE_W) & (~PTE_COW);
+  *pte = PA2PTE(new_page) | flags;
+
+  // free COW page
+  kfree((void *)pa);
+
+  if (debug) {
+    printf("get_pa(): new page %p is returned\n", new_page);
+  }
+  return (uint64)new_page;
+}
+
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.
 // Return 0 on success, -1 on error.
@@ -350,7 +404,8 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
+    pa0 = get_pa(pagetable, va0);
+    // pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);

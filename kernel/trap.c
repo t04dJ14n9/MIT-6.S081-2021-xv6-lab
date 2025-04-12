@@ -29,6 +29,57 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+void handle_page_fault(struct proc* p) {
+  // page fault
+  uint64 va = r_stval();  // the virtual address that caused the page fault 
+  if (va >= MAXVA) {
+    printf("handle_page_fault(): unexpected stval %p pid=%d\n", va, p->pid);
+    p->killed = 1;
+    return;
+  } 
+  // get pte for the faulting virtual address
+  pte_t* pte = walk(p->pagetable, va, 0);
+  if (!pte){
+    printf("handle_page_fault(): walk() returned nil\n");
+    p->killed = 1;
+    return;
+  }
+
+  uint64 flags = PTE_FLAGS(*pte);
+  if (debug) {
+    printf("handle_page_fault(): va = %p, flags = %p, flag & PTE_COW = %p\n", va,
+            flags, flags & PTE_COW);
+  }
+
+  if (!(flags & PTE_U)) {
+    printf("handle_page_fault(): user bit not set\n");
+    p->killed = 1;
+    return;
+  }
+
+  if (!(flags & PTE_COW)) {
+    printf("handle_page_fault(): COW bit not set\n");
+    p->killed = 1;
+    return;
+  }
+
+  // mem is the pa of new page
+  char* mem = kalloc();
+  if (mem == 0) {
+    printf("handle_page_fault(): out of memory\n");
+    p->killed = 1;
+    return;
+  }
+
+  uint64 pa = PTE2PA(*pte); // physical address of COW page
+  memmove((char*)mem, (char*)pa, PGSIZE);  // copy COW page to it
+  flags = (flags | PTE_W) & ~PTE_COW;
+  if (debug){
+    printf("handle_page_fault(): flags after: %p\n", flags);
+  }
+  *pte = (PA2PTE(mem) | flags); // modify the PTE to point to the new page
+  kfree((void *)pa); // release old COW page
+}
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -65,7 +116,10 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } else if (r_scause() == 15){ // 15 denote page fault
+    handle_page_fault(p);
+  }
+  else if((which_dev = devintr()) != 0){
     // ok
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);

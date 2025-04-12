@@ -1,3 +1,5 @@
+#include "spinlock.h"
+#include "memlayout.h"
 struct buf;
 struct context;
 struct file;
@@ -63,7 +65,18 @@ void            ramdiskrw(struct buf*);
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
+int inc_ref_count(uint64 pa);
+int dec_ref_count(uint64 pa);
+void set_ref_count(uint64 pa, int count);
 
+struct spin_ref {
+  struct spinlock lock;
+  int ref_count[PHYSTOP / PGSIZE];
+};
+
+extern struct spin_ref spin_ref_count;
+
+extern int debug;
 // log.c
 void            initlog(int, struct superblock*);
 void            log_write(struct buf*);
@@ -167,6 +180,7 @@ void            uvmfree(pagetable_t, uint64);
 void            uvmunmap(pagetable_t, uint64, uint64, int);
 void            uvmclear(pagetable_t, uint64);
 uint64          walkaddr(pagetable_t, uint64);
+pte_t *walk(pagetable_t pagetable, uint64 va, int alloc);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);

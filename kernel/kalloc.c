@@ -23,11 +23,47 @@ struct {
   struct run *freelist;
 } kmem;
 
+struct spin_ref spin_ref_count;
+
+int
+inc_ref_count(uint64 pa){
+  acquire(&spin_ref_count.lock);
+  int count = ++spin_ref_count.ref_count[pa / PGSIZE];
+  release(&spin_ref_count.lock);
+  return count;
+}
+
+int
+dec_ref_count(uint64 pa) {
+  acquire(&spin_ref_count.lock);
+  int count = --spin_ref_count.ref_count[pa / PGSIZE];
+  release(&spin_ref_count.lock);
+  return count;
+}
+
+void
+set_ref_count(uint64 pa, int count) {
+  acquire(&spin_ref_count.lock);
+  spin_ref_count.ref_count[pa / PGSIZE] = count;
+  release(&spin_ref_count.lock);
+}
+int debug = 0;
+
+void 
+init_spin_ref_count() 
+{
+  initlock(&spin_ref_count.lock, "spin_ref_count");
+  for (int i = 0; i < PHYSTOP / PGSIZE; i++) {
+    spin_ref_count.ref_count[i] = 0;
+  }
+}
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
   freerange(end, (void*)PHYSTOP);
+  init_spin_ref_count();
 }
 
 void
@@ -51,6 +87,11 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
+  // check ref count
+  int count = dec_ref_count((uint64)pa);
+  if(count > 0){ // if the physical page is referenced by other process
+    return;
+  }
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
 
@@ -76,7 +117,9 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
+  if(r){
+    set_ref_count((uint64)r, 1); 
     memset((char*)r, 5, PGSIZE); // fill with junk
+  }
   return (void*)r;
 }
