@@ -1,0 +1,16 @@
+The get() is thread-safe since it does not modify the `table`, so key must not exist in the `table` as reported.
+
+Problem will arise if two thread concurrently enters `insert`.
+```go
+static void 
+insert(int key, int value, struct entry **p, struct entry *n)
+{
+  struct entry *e = malloc(sizeof(struct entry));
+  e->key = key;
+  e->value = value;
+  e->next = n;
+  *p = e;
+}
+```
+Both thread  might enter `  *p = e;`
+And  the later thread to execute this line will overwrite the head of the table.

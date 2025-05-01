@@ -13,9 +13,13 @@ struct entry {
   int value;
   struct entry *next;
 };
+// entry is a simplified version of hash table where the hash function is simply hash(key) = key % NBUCKET
+// collison is resolved using buckets.
 struct entry *table[NBUCKET];
+// keys is the global set of keys. Each thread is responsible for one portion of keys.
 int keys[NKEYS];
 int nthread = 1;
+pthread_mutex_t locks[NBUCKET];
 
 
 double
@@ -36,6 +40,8 @@ insert(int key, int value, struct entry **p, struct entry *n)
   *p = e;
 }
 
+// put checks if key exists in the table, if so, update its value to be value
+// otherwise insert the key-value pair to the front of table
 static 
 void put(int key, int value)
 {
@@ -51,10 +57,11 @@ void put(int key, int value)
     // update the existing key.
     e->value = value;
   } else {
+    pthread_mutex_lock(&locks[i]);
     // the new is new.
     insert(key, value, &table[i], table[i]);
+    pthread_mutex_unlock(&locks[i]);
   }
-
 }
 
 static struct entry*
@@ -71,6 +78,7 @@ get(int key)
   return e;
 }
 
+// put_thread takes in the thread number n, the calls put() for each key within its range of keys
 static void *
 put_thread(void *xa)
 {
@@ -118,6 +126,10 @@ main(int argc, char *argv[])
     keys[i] = random();
   }
 
+  // initialize the mutex lock
+  for(int i = 0; i < NBUCKET; i ++){
+    pthread_mutex_init(&locks[i], NULL);
+  }
   //
   // first the puts
   //
