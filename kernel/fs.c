@@ -377,6 +377,7 @@ iunlockput(struct inode *ip)
 static uint
 bmap(struct inode *ip, uint bn)
 {
+  // printf("inode number: %d, bn: %p\n", ip->inum, bn);
   uint addr, *a;
   struct buf *bp;
 
@@ -388,16 +389,52 @@ bmap(struct inode *ip, uint bn)
   bn -= NDIRECT;
 
   if(bn < NINDIRECT){
-    // Load indirect block, allocating if necessary.
-    if((addr = ip->addrs[NDIRECT]) == 0)
-      ip->addrs[NDIRECT] = addr = balloc(ip->dev);
-    bp = bread(ip->dev, addr);
-    a = (uint*)bp->data;
-    if((addr = a[bn]) == 0){
-      a[bn] = addr = balloc(ip->dev);
-      log_write(bp);
+    // if block number resides in singly-indirect block
+    if(bn < N_SINGLE_INDIRECT){
+      printf("locating level 1 indirect block: bn = %d\n", bn);
+      // Load indirect block, allocating if necessary.
+      if((addr = ip->addrs[NDIRECT]) == 0)
+        ip->addrs[NDIRECT] = addr = balloc(ip->dev);
+      bp = bread(ip->dev, addr);
+      a = (uint*)bp->data;
+      if((addr = a[bn]) == 0){
+        a[bn] = addr = balloc(ip->dev);
+        log_write(bp);
+      }
+      brelse(bp);
+      return addr;
+    } 
+    // block number resides in doubly-indirect block
+    bn -= N_SINGLE_INDIRECT;
+    uint blockIndex =
+        bn / N_SINGLE_INDIRECT;  // block index into singly-indirect block
+    uint offset =
+        bn % N_SINGLE_INDIRECT;  // block index into doubly-indirect block
+
+    printf("locating level 2 indirect block: bn = %d, index = %d, offset = %d\n", bn, blockIndex, offset);
+
+    addr = ip->addrs[NDIRECT + 1];
+    if (addr == 0) {  // if doubly-indirect block was not allocated, allocate it
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
     }
-    brelse(bp);
+    struct buf *sib_buffer = bread(ip->dev, addr);
+    uint *sib= (uint *)sib_buffer->data; // singly-indirect block 
+    
+    addr = sib[blockIndex];
+    if(addr == 0){
+      sib[blockIndex] = addr = balloc(ip->dev);
+      log_write(sib_buffer);
+    }
+
+    struct buf *dib_buffer = bread(ip->dev, addr);
+    uint *dib = (uint *)dib_buffer->data; // doubly-indirect block
+    addr = dib[offset];
+    if(addr == 0){
+      dib[offset] = addr = balloc(ip->dev);
+      log_write(dib_buffer);
+    }
+    brelse(sib_buffer);
+    brelse(dib_buffer);
     return addr;
   }
 
@@ -430,6 +467,28 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[NDIRECT+1]){ // doubly indirect level 1 block exists
+    struct buf *lvl1blk = bread(ip->dev, ip->addrs[NDIRECT+1]);
+    uint *lvl1data = (uint*)lvl1blk->data; // content of level indirect block
+    for(j = 0; j < NINDIRECT; j++){
+      if(lvl1data[j]){
+        struct buf *lvl2blk = bread(ip->dev, lvl1data[j]);
+        uint *lvl2data = (uint*)lvl2blk->data;
+        for(int k = 0; k < NINDIRECT; k++){
+          if(lvl2data[k]){
+            bfree(ip->dev, lvl2data[k]);
+          }
+        }
+        brelse(lvl2blk);
+
+        bfree(ip->dev, lvl1data[j]);
+      }
+    }
+    brelse(lvl1blk);
+    bfree(ip->dev, ip->addrs[NDIRECT+1]);
+    ip->addrs[NDIRECT+1] = 0;
   }
 
   ip->size = 0;
