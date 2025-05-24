@@ -75,7 +75,7 @@ install_trans(int recovering)
     struct buf *dbuf = bread(log.dev, log.lh.block[tail]); // read dst
     memmove(dbuf->data, lbuf->data, BSIZE);  // copy block to dst
     bwrite(dbuf);  // write dst to disk
-    if(recovering == 0)
+    if(recovering == 0) // if not in recovering mode, no reference exist to the block
       bunpin(dbuf);
     brelse(lbuf);
     brelse(dbuf);
@@ -128,13 +128,15 @@ begin_op(void)
 {
   acquire(&log.lock);
   while(1){
-    if(log.committing){
+    if (log.committing) {  // if already commiting, wait
       sleep(&log, &log.lock);
-    } else if(log.lh.n + (log.outstanding+1)*MAXOPBLOCKS > LOGSIZE){
+    }
+    else if (log.lh.n + (log.outstanding + 1) * MAXOPBLOCKS > LOGSIZE) {
       // this op might exhaust log space; wait for commit.
       sleep(&log, &log.lock);
-    } else {
-      log.outstanding += 1;
+    }
+    else {
+      log.outstanding += 1; // incrementing outstanding will reserve space in the log and prevent commit
       release(&log.lock);
       break;
     }

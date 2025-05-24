@@ -165,6 +165,61 @@ bad:
   return -1;
 }
 
+// sys_symlink implement the symbolic link syscall
+uint64
+sys_symlink(void){
+  // 1. parse argument
+
+  char name[DIRSIZ], target[MAXPATH], path[MAXPATH];
+  // dp: parent of the symlink inode to be created
+  // ip: newly created symlink inode
+  struct inode *dp, *ip;
+
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0) return -1;
+  begin_op();
+  printf("[sys_symlink] target: %s, path: %s\n", target, path);
+
+  // 2. look at the parent inode
+  if((dp = nameiparent(path, name)) == 0) {
+    printf("fail in lookup parent inode\n");
+    end_op();
+    return -1;
+  }
+  ilock(dp);
+  // 3. create inode at path whose data contain path's string literal
+  if ((ip = ialloc(dp->dev, T_SYMLINK)) == 0) {
+    printf("fail in ialloc\n");
+    iunlockput(dp);
+    end_op();
+    return -1;
+  }
+  ilock(ip);
+  if(dirlink(dp, name, ip->inum) < 0) {
+    printf("fail in dir link\n");
+    iunlockput(dp);
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+  ip->nlink++;
+  // 4. write target string literal to inode
+  if(writei(ip, 0, (uint64)target, 0, strlen(target)) != strlen(target)){
+    printf("fail in writei\n");
+    ip->nlink--;
+    iunlockput(ip);
+    iunlockput(dp);
+    end_op();
+    return -1;
+  }
+
+  iupdate(ip);
+  iupdate(dp);
+  iunlockput(ip);
+  iunlockput(dp);
+  end_op();
+  return 0;
+}
+
 // Is the directory dp empty except for "." and ".." ?
 static int
 isdirempty(struct inode *dp)
@@ -192,6 +247,7 @@ sys_unlink(void)
   if(argstr(0, path, MAXPATH) < 0)
     return -1;
 
+  printf("[sys_unlink] path: %s\n", path);
   begin_op();
   if((dp = nameiparent(path, name)) == 0){
     end_op();
@@ -294,9 +350,10 @@ sys_open(void)
 
   if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
     return -1;
-
+  printf("[sys_open] path: %s\n", path);
   begin_op();
-
+  // when O_CREATE is passed, create the file
+  printf("[sys_open] after begin_op\n");
   if(omode & O_CREATE){
     ip = create(path, T_FILE, 0, 0);
     if(ip == 0){
@@ -313,6 +370,38 @@ sys_open(void)
       iunlockput(ip);
       end_op();
       return -1;
+    }
+  }
+  printf("[sys_open] inode num: %d, type: %d, omode: %p\n", ip->inum, ip->type, omode);
+  int cnt = 0; // count of following the symbolic link, break from the loop if exceeding 10
+  // need to follow the symbolic link
+  while(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)){
+    if(cnt > 10){
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+    cnt++;
+    printf("[sys_open] while loop cnt: %d\n", cnt);
+    char next[MAXPATH];
+    
+    if(readi(ip, 0, (uint64)next, 0, MAXPATH) <= 0){
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+    printf("[sys_open]: read from syslink data: next=%s\n", next);
+    // go to the target file, drop reference before hand
+    iunlockput(ip);
+    if((ip = namei(next)) <= 0){
+      // failed to get the inode of target
+      end_op();
+      return -1;
+    }
+    ilock(ip);
+    if(ip->type == T_DIR){
+      iunlockput(ip);
+      panic("open symbolic link to directory not implemented yet");
     }
   }
 
