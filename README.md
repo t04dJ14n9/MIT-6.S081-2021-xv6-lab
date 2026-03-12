@@ -4,17 +4,28 @@ This repository contains my personal implementation of the [MIT 6.S081-2021 xv6 
 
 ## Overview
 
-| Lab | Branch | Topic | Status |
-|-----|--------|-------|--------|
-| Lab 1 | `util` | Utilities | Completed |
-| Lab 2 | `syscall` | System Calls | Completed |
-| Lab 3 | `pgtbl` | Page Tables | Completed |
-| Lab 4 | `traps` | Traps | Completed |
-| Lab 5 | `cow` | Copy-on-Write | Completed |
-| Lab 6 | `fs` | File System | Completed |
-| Lab 7 | `thread` | Multithreading | Completed |
+| Lab | Branch | Topic | Status | Detailed Report |
+|-----|--------|-------|--------|-----------------|
+| Lab 1 | `util` | Utilities | Completed | [lab1-util-report.md](lab1-util-report.md) |
+| Lab 2 | `syscall` | System Calls | Completed | [lab2-syscall-report.md](lab2-syscall-report.md) |
+| Lab 3 | `pgtbl` | Page Tables | Completed | [lab3-pgtbl-report.md](lab3-pgtbl-report.md) |
+| Lab 4 | `traps` | Traps | Completed | [lab4-traps-report.md](lab4-traps-report.md) |
+| Lab 5 | `cow` | Copy-on-Write | Completed | [lab5-cow-report.md](lab5-cow-report.md) |
+| Lab 6 | `fs` | File System | Completed | [lab6-fs-report.md](lab6-fs-report.md) |
+| Lab 7 | `thread` | Multithreading | Completed | [lab7-thread-report.md](lab7-thread-report.md) |
 
 To run any lab, switch to the corresponding branch and run `make qemu`.
+
+### Detailed Implementation Reports
+
+Each lab has a comprehensive report containing:
+- **Full implementation code** with syntax highlighting
+- **Detailed explanations** of design decisions and algorithms
+- **Architecture diagrams** showing data structures and flow
+- **Testing instructions** with example output
+- **Key concepts learned** from each assignment
+
+📄 **Quick Links**: [Lab 1](lab1-util-report.md) | [Lab 2](lab2-syscall-report.md) | [Lab 3](lab3-pgtbl-report.md) | [Lab 4](lab4-traps-report.md) | [Lab 5](lab5-cow-report.md) | [Lab 6](lab6-fs-report.md) | [Lab 7](lab7-thread-report.md)
 
 ---
 
